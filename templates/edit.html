@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Edit VPS{% endblock %}
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h4 mb-0">Edit VPS / RDP</h1>
+        <a href="{{ url_for('index') }}" class="btn btn-light"><i class="bi bi-arrow-left"></i> Kembali</a>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <form method="post">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Nama</label>
+                <input type="text" name="name" value="{{ vps.name }}" class="form-control" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">IP/Domain</label>
+                <input type="text" name="ip" value="{{ vps.ip }}" class="form-control" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Port</label>
+                <input type="number" name="port" value="{{ vps.port }}" min="1" max="65535" class="form-control" required />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Tanggal Expired</label>
+                <input type="date" name="expired" value="{{ vps.expired.strftime('%Y-%m-%d') }}" class="form-control" required />
+              </div>
+
+              <div class="col-6">
+                <label class="form-label">Harga</label>
+                <input type="text" name="price" value="{{ (vps.price or 0) if vps.price is defined else 0 }}" class="form-control">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Currency</label>
+                <input type="text" name="currency" value="{{ vps.currency if vps.currency is defined else 'IDR' }}" class="form-control">
+              </div>
+
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4">
+              <a href="{{ url_for('index') }}" class="btn btn-light">Batal</a>
+              <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
