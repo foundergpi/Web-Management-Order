@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+{% block title %}GPI - Web Management Order{% endblock %}
+{% block content %}
+
+    <div class="text-center">
+      <h1 class="h4 mb-0">DATA PENJUALAN VPS / RDP / AKUN</h1>
+      <div class="small-muted">Pantau port, masa berlaku, dan status konektivitas</div>
+
+      <nav>
+      <ul class="pagination" id="pagination"></ul>
+      </nav>
+
+    </div>
+
+    <!-- Toggle slider: VPS/RDP <-> Akun -->
+  <div class="form-check form-switch ms-3">
+    <input class="form-check-input" type="checkbox" id="viewSwitch">
+    <label class="form-check-label" for="viewSwitch">Tampilkan Akun</label>
+  </div>
+  <br>
+<div id="vpsSection" class="card">
+ <div class="card">
+    <div class="card-body">
+      <div class="row g-2 mb-3">
+        <div class="col-12 col-md-3">
+          <input id="filterName" type="text" class="form-control" placeholder="Cari Nama VPS/RDP" />
+        </div>
+        <div class="col-12 col-md-3">
+          <input id="filterIp" type="text" class="form-control" placeholder="Cari IP/Domain" />
+        </div>
+        <div class="col-12 col-md-2">
+          <input id="filterPort" type="number" class="form-control" placeholder="Port" />
+        </div>
+        <div class="col-12 col-md-2 ms-auto text-end">
+          <div class="btn-group" role="group">
+            <button class="btn btn-outline-secondary btn-sm" id="btnClear"><i class="bi bi-x-circle"></i> Reset</button>
+            <button class="btn btn-outline-secondary btn-sm" id="btnRefresh"><i class="bi bi-arrow-repeat"></i> Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table align-middle table-hover">
+          <thead>
+            <tr class="text-nowrap">
+              <th>Nama</th>
+              <th>IP</th>
+              <th>Port</th>
+              <th>Status</th>
+              <th>Expired</th>
+              <th class="text-center">Sisa Hari</th>
+              <th>Label</th>
+              <th>Harga</th>
+            </tr>
+          </thead>
+          <tbody id="vpsBody">
+            {% for vps in vps_list %}
+              {% set label %}
+                {% if vps.days_left < 0 %}EXPIRED{% elif vps.days_left <= 3 %}SEGERA EXPIRED{% else %}AKTIF{% endif %}
+              {% endset %}
+              <tr data-name="{{ vps.name|lower }}" data-ip="{{ vps.ip|lower }}" data-port="{{ vps.port }}"
+                  class="{% if vps.days_left < 0 %}table-danger{% elif vps.days_left <= 3 %}table-warning{% endif %}">
+                <td class="fw-medium">{{ vps.name }}</td>
+                <td class="font-monospace">{{ vps.ip }}</td>
+                <td class="font-monospace">{{ vps.port }}</td>
+                <td>
+                  {% if vps.is_up %}
+                    <span class="status-dot dot-up"></span>
+                    <span class="badge rounded-pill text-bg-success">UP</span>
+                  {% else %}
+                    <span class="status-dot dot-down"></span>
+                    <span class="badge rounded-pill text-bg-danger">DOWN</span>
+                  {% endif %}
+                </td>
+                <td>{{ vps.expired }}</td>
+                <td class="text-center fw-semibold">{{ vps.days_left }}</td>
+                <td>
+                  {% if vps.days_left < 0 %}
+                    <span class="status-dot dot-exp"></span><span class="badge badge-soft">EXPIRED</span>
+                  {% elif vps.days_left <= 3 %}
+                    <span class="status-dot dot-warn"></span><span class="badge badge-soft">SEGERA EXPIRED</span>
+                  {% else %}
+                    <span class="status-dot dot-ok"></span><span class="badge badge-soft">AKTIF</span>
+                  {% endif %}
+                </td>
+                <td class="font-monospace">
+                    {{ vps.price|cur(vps.currency or 'IDR') }}
+                </td>
+
+
+
+                
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="small-muted">Total Customer : {{ vps_list|length }}</div>
+        <div class="small-muted">Auto-refresh manual via tombol di atas</div>
+        <nav><ul class="pagination" id="paginationVps"></ul></nav>
+      </div>
+
+   
+
+    </div>
+ </div>
+</div>
+
+<div id="akunSection" class="card d-none">
+  <div class="card-body">
+    <div class="row g-2 mb-3">
+      <div class="col-12 col-md-4">
+        <input id="akunSearch" type="text" class="form-control" placeholder="Cari nama / merchant / type">
+      </div>
+      <div class="col-12 col-md-2 ms-auto text-end">
+        <button class="btn btn-outline-secondary btn-sm" id="akunRefresh"><i class="bi bi-arrow-repeat"></i> Refresh</button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table align-middle table-hover">
+        <thead class="bg-body-secondary">
+          <tr class="text-nowrap">
+            <th>Tanggal</th>
+            <th>Nama</th>
+            <th>Merchant</th>
+            <th>Type</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Harga</th>
+            <th class="text-end">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody id="akunBody">
+          {% for a in akun_list %}
+          <tr data-name="{{ (a.name or '')|lower }}"
+              data-merchant="{{ (a.merchant or '')|lower }}"
+              data-type="{{ (a.atype or '')|lower }}">
+            <td>{{ a.date }}</td>
+            <td>{{ a.name }}</td>
+            <td>{{ a.merchant or '-' }}</td>
+            <td>{{ a.atype or '-' }}</td>
+            <td class="text-end">{{ a.qty }}</td>
+            <td class="text-end font-monospace">{{ a.currency }} {{ "{:,.0f}".format(a.price).replace(",", ".") }}</td>
+            <td class="text-end font-monospace">{{ a.currency }} {{ "{:,.0f}".format(a.subtotal).replace(",", ".") }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted">Belum ada penjualan akun.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="small-muted">Total Customer : {{ akun_list|length }} </div>
+        <div class="small-muted">Auto-refresh manual via tombol di atas</div>
+        <nav><ul class="pagination" id="paginationAkun"></ul></nav>
+      </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const filterName = document.getElementById('filterName');
+  const filterIp = document.getElementById('filterIp');
+  const filterPort = document.getElementById('filterPort');
+  const tbody = document.getElementById('vpsBody');
+
+  function applyFilter(){
+    const qName = (filterName.value || '').toLowerCase();
+    const qIp = (filterIp.value || '').toLowerCase();
+    const qPort = (filterPort.value || '').trim();
+
+    for (const tr of tbody.querySelectorAll('tr')){
+      const okName = tr.dataset.name.includes(qName);
+      const okIp = tr.dataset.ip.includes(qIp);
+      const okPort = qPort === '' || tr.dataset.port === qPort;
+      tr.style.display = (okName && okIp && okPort) ? '' : 'none';
+    }
+  }
+  filterName.addEventListener('input', applyFilter);
+  filterIp.addEventListener('input', applyFilter);
+  filterPort.addEventListener('input', applyFilter);
+  document.getElementById('btnClear').addEventListener('click', () => {
+    filterName.value = ''; filterIp.value = ''; filterPort.value = ''; applyFilter();
+  });
+  document.getElementById('btnRefresh').addEventListener('click', () => {
+    location.reload();
+  });
+</script>
+
+<script>
+  // === Toggle View (VPS <-> Akun) ===
+  const viewSwitch  = document.getElementById('viewSwitch');
+  const vpsSection  = document.getElementById('vpsSection');
+  const akunSection = document.getElementById('akunSection');
+
+  // restore dari localStorage
+  (function() {
+    const saved = localStorage.getItem('homeView') || 'vps';
+    if (saved === 'akun') {
+      viewSwitch.checked = true;
+      vpsSection.classList.add('d-none');
+      akunSection.classList.remove('d-none');
+    }
+  })();
+
+  viewSwitch?.addEventListener('change', () => {
+    const akunMode = viewSwitch.checked;
+    if (akunMode) {
+      vpsSection.classList.add('d-none');
+      akunSection.classList.remove('d-none');
+      localStorage.setItem('homeView', 'akun');
+    } else {
+      akunSection.classList.add('d-none');
+      vpsSection.classList.remove('d-none');
+      localStorage.setItem('homeView', 'vps');
+    }
+  });
+
+  // === Pencarian Akun ===
+  const akunSearch = document.getElementById('akunSearch');
+  const akunBody   = document.getElementById('akunBody');
+  akunSearch?.addEventListener('input', () => {
+    const q = (akunSearch.value || '').toLowerCase();
+    akunBody.querySelectorAll('tr').forEach(tr => {
+      const ok = tr.dataset.name.includes(q) ||
+                 tr.dataset.merchant.includes(q) ||
+                 tr.dataset.type.includes(q);
+      tr.style.display = ok ? '' : 'none';
+    });
+  });
+  document.getElementById('akunRefresh')?.addEventListener('click', () => location.reload());
+</script>
+
+<script>
+    // === PAGINATION ===
+    function setupPagination(tableId, rowsPerPage, pagerId="pagination"){
+      const table = document.getElementById(tableId);
+      const rows  = table ? table.querySelectorAll("tr") : [];
+      const pager = document.getElementById(pagerId);
+      if (!table || !pager) return;
+
+      let cur = 1;
+      function pageCount(){ return Math.ceil(rows.length / rowsPerPage) || 1; }
+      function renderRows(){
+        rows.forEach((row, i)=>{
+          row.style.display = (i >= (cur-1)*rowsPerPage && i < cur*rowsPerPage) ? "" : "none";
+        });
+      }
+      function renderPager(){
+        pager.innerHTML = "";
+        const pages = pageCount();
+        for (let i=1;i<=pages;i++){
+          const li = document.createElement("li");
+          li.className = "page-item" + (i===cur ? " active":"");
+          const a = document.createElement("a");
+          a.className = "page-link"; a.href="#"; a.textContent = i;
+          a.addEventListener("click", e=>{
+            e.preventDefault(); cur = i; renderRows(); renderPager();
+          });
+          li.appendChild(a); pager.appendChild(li);
+        }
+      }
+      renderRows(); renderPager();
+    }
+
+    // Jalankan:
+    setupPagination("vpsBody", 10, "paginationVps");   // untuk tabel VPS
+    setupPagination("akunBody", 10, "paginationAkun"); // aktifkan jika mau paginasi tabel Akun juga
+  </script>
+
+{% endblock %}
