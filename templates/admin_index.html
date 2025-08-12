@@ -1,0 +1,484 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+
+<!-- Import Preview Modal -->
+<div class="modal fade" id="importPreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Preview Import</h5>
+        <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="importInfo" class="small text-muted mb-2"></div>
+        <h6>VPS</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Nama</th><th>IP</th><th>Port</th><th>Expire</th><th>Price</th><th>Currency</th></tr></thead>
+            <tbody id="prevVps"></tbody>
+          </table>
+        </div>
+        <h6 class="mt-3">Akun</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Tanggal</th><th>Nama</th><th>Merchant</th><th>Tipe</th><th>Qty</th><th>Price</th><th>Currency</th></tr></thead>
+            <tbody id="prevAkun"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <form id="cancelForm" method="post" class="me-auto"></form>
+        <form id="confirmForm" method="post"></form>
+        <button class="btn btn-outline-secondary" form="cancelForm">Cancel</button>
+        <button class="btn btn-primary" form="confirmForm">Confirm Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const token = new URLSearchParams(location.search).get("import_token");
+  if(!token) return;
+  fetch(`/admin/import/preview/${token}`)
+    .then(r=>r.json()).then(d=>{
+      if(!d.ok) return;
+      const vps = d.vps||[], akun=d.akun||[];
+      document.getElementById('importInfo').textContent = `VPS: ${vps.length} baris, Akun: ${akun.length} baris. Periksa sebelum disimpan.`;
+      document.getElementById('prevVps').innerHTML = vps.map(x=>`<tr><td>${x.name||''}</td><td>${x.ip||''}</td><td>${x.port||''}</td><td>${x.expire_date||''}</td><td>${x.price??0}</td><td>${x.currency||''}</td></tr>`).join('') || `<tr><td colspan="6" class="text-muted">Tidak ada data VPS</td></tr>`;
+      document.getElementById('prevAkun').innerHTML = akun.map(x=>`<tr><td>${x.sold_at||''}</td><td>${x.name||''}</td><td>${x.merchant||''}</td><td>${x.type||''}</td><td>${x.qty??0}</td><td>${x.price??0}</td><td>${x.currency||''}</td></tr>`).join('') || `<tr><td colspan="7" class="text-muted">Tidak ada data Akun</td></tr>`;
+      document.getElementById('confirmForm').action = `/admin/import/confirm/${token}`;
+      document.getElementById('cancelForm').action  = `/admin/import/cancel/${token}`;
+      new bootstrap.Modal(document.getElementById('importPreviewModal')).show();
+    }).catch(console.error);
+})();
+</script>
+
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="mb-0">Dashboard Admin</h4>
+  <div class="d-flex gap-2">
+    <!-- Modal Tambah VPS sudah kamu punya -->
+    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addAccountModal">+ Tambah Akun</button>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addModal">+ Tambah VPS</button>
+    <form action="{{ url_for('admin_import_excel') }}" method="post" enctype="multipart/form-data" class="d-inline">
+  <label class="btn btn-secondary btn-sm mb-0">Import Excel
+    <input type="file" name="file" accept=".xlsx" hidden onchange="this.form.submit()">
+  </label>
+</form>
+<a href="{{ url_for('admin_logout') }}" class="btn btn-light btn-sm">Logout</a>
+  </div>
+</div>
+
+<!-- Ringkasan Penjualan -->
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card p-3"><b>Total VPS</b><div class="h5 mb-0">{{ stats.total }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3"><b>UP</b><div class="h5 mb-0">{{ stats.up }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3"><b>DOWN</b><div class="h5 mb-0">{{ stats.down }}</div></div></div>
+  <div class="col-md-3"><div class="card p-3"><b>Expired</b><div class="h5 mb-0">{{ stats.expired }}</div></div></div>
+</div>
+
+<!-- Tambah baris ini untuk Total Akun + Total penjualan (gabungan) -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card p-3">
+      <b>Total Akun</b>
+      <div class="h5 mb-0">{{ total_akun }}</div>
+      <small class="text-muted">Jumlah item akun terjual</small>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <b>Total Penjualan Bulan Ini</b>
+      <div class="h4 mb-0">IDR {{ "{:,.0f}".format(month_total).replace(",", ".") }}</div>
+      <small class="text-muted">VPS + Akun (berdasarkan tanggal input)</small>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card p-3">
+      <b>Total Semua Penjualan</b>
+      <div class="h4 mb-0">IDR {{ "{:,.0f}".format(all_total).replace(",", ".") }}</div>
+      <small class="text-muted">Akumulasi seluruh waktu (VPS + Akun)</small>
+    </div>
+  </div>
+</div>
+
+<!-- Tabel VPS (yang sudah ada) -->
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="mb-3">Data Penjualan VPS / RDP</h5>
+    <div class="table-responsive">
+      <table class="table align-middle table-hover">
+        <thead>
+          <tr class="text-nowrap">
+            <th>Nama</th><th>IP</th><th>Port</th><th>Expired</th><th>Harga</th><th class="text-end">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in items %}
+          <tr>
+            <td>{{ v.get('name','') }}</td>
+            <td class="font-monospace">{{ v.get('ip','') }}</td>
+            <td class="font-monospace">{{ v.get('port','') }}</td>
+            <td>
+              {% set exp=v.get('expired') %}
+              {{ exp.strftime('%Y-%m-%d') if exp.__class__.__name__=='datetime' else exp }}
+            </td>
+
+            <td class="font-monospace">
+                {{ v.get('price', 0)|cur(v.get('currency', 'IDR')) }}
+            </td>
+
+
+            <td class="text-end text-nowrap">
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('edit_vps', id=v._id) }}">Edit</a>
+              <a class="btn btn-sm btn-outline-danger" href="{{ url_for('delete_vps', id=v._id) }}" onclick="return confirm('Hapus item ini?')">Hapus</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h5 class="mb-3">Data Penjualan Akun</h5>
+    <div class="table-responsive">
+      <table class="table align-middle table-hover">
+        <thead class="bg-body-secondary">
+          <tr class="text-nowrap">
+            <th>Tanggal</th>
+            <th>Nama</th>
+            <th>Merchant</th>
+            <th>Type</th>
+            <th class="text-end">Total Beli</th>
+            <th class="text-end">Harga Satuan</th>
+            <th class="text-end">Subtotal</th>
+            <th class="text-end">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in akun_list %}
+          {% set subtotal = (a.price or 0) * (a.qty or 0) %}
+          <tr>
+            <td>{{ (a.sold_at.strftime('%Y-%m-%d') if a.sold_at.__class__.__name__=='datetime' else a.sold_at) }}</td>
+            <td>{{ a.name }}</td>
+            <td>{{ a.merchant or '-' }}</td>
+            <td>{{ a.account_type or '-' }}</td>
+            <td class="text-end">{{ a.qty }}</td>
+            <td class="text-end font-monospace">{{ a.currency or 'IDR' }} {{ "{:,.0f}".format(a.price or 0).replace(",", ".") }}</td>
+            <td class="text-end font-monospace">{{ a.currency or 'IDR' }} {{ "{:,.0f}".format(subtotal).replace(",", ".") }}</td>
+            <td class="text-end">
+                <button
+                    class="btn btn-sm btn-outline-secondary btn-edit-akun"
+                    data-id="{{ a._id }}"
+                    data-name="{{ a.name }}"
+                    data-merchant="{{ a.merchant or '' }}"
+                    data-type="{{ a.account_type or '' }}"
+                    data-qty="{{ a.qty or 1 }}"
+                    data-price="{{ a.price or 0 }}"
+                    data-currency="{{ a.currency or 'IDR' }}"
+                    data-date="{{ a.sold_at.strftime('%Y-%m-%d') if a.sold_at.__class__.__name__=='datetime' else '' }}"
+                    data-bs-toggle="modal" data-bs-target="#editAccountModal">
+                    Edit
+                </button>
+                <a class="btn btn-sm btn-outline-danger"
+                    href="{{ url_for('admin_delete_account_sale', id=a._id) }}"
+                    onclick="return confirm('Hapus item ini?')">Hapus</a>
+            </td>
+
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center text-muted">Belum ada penjualan akun.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- Modal Tambah VPS -->
+<div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('admin_add_vps') }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Tambah VPS / RDP</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Nama</label>
+              <input name="name" type="text" class="form-control" required />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">IP/Domain</label>
+              <input name="ip" type="text" class="form-control" required />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Port</label>
+              <input name="port" type="number" min="1" max="65535" class="form-control" required />
+            </div>
+            <div class="col-12">
+              <label class="form-label">Tanggal Expired</label>
+              <input name="expired" type="date" class="form-control" required />
+            </div>
+
+            <!-- di dalam <div class="row g-3"> modal Tambah VPS -->
+            <div class="col-6">
+                <label class="form-label">Harga (opsional)</label>
+                <input name="price" type="text" class="form-control" placeholder="150000">
+            </div>
+            <div class="col-6">
+                <label class="form-label">Currency</label>
+                <input name="currency" type="text" class="form-control" value="IDR">
+            </div>
+
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tambah Akun -->
+<div class="modal fade" id="addAccountModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('admin_add_account_sale') }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Tambah Penjualan Akun</h5>
+          <button class="btn-close" data-bs-dismiss="modal" type="button" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Nama</label>
+              <input name="a_name" type="text" class="form-control" placeholder="Contoh: Netflix Premium" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Nama Merchant</label>
+              <input name="a_merchant" type="text" class="form-control" placeholder="Contoh: Tokopedia / Shopee">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Type Akun</label>
+              <input name="a_type" type="text" class="form-control" placeholder="Contoh: 1 Bulan / 1 Tahun">
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label">Total Beli</label>
+              <input name="a_qty" type="number" min="1" value="1" class="form-control" required>
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label">Harga Satuan</label>
+              <input name="a_price" type="text" class="form-control" placeholder="150000" required>
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label">Currency</label>
+              <input name="a_currency" type="text" class="form-control" value="IDR">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Tanggal Penjualan (opsional)</label>
+              <input name="a_date" type="date" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-light" data-bs-dismiss="modal" type="button">Batal</button>
+          <button class="btn btn-success" type="submit">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Edit Akun -->
+<div class="modal fade" id="editAccountModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="editAccountForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Penjualan Akun</h5>
+          <button class="btn-close" data-bs-dismiss="modal" type="button" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Nama</label>
+              <input name="a_name" id="ea_name" type="text" class="form-control" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Nama Merchant</label>
+              <input name="a_merchant" id="ea_merchant" type="text" class="form-control">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label">Type Akun</label>
+              <input name="a_type" id="ea_type" type="text" class="form-control">
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label">Total Beli</label>
+              <input name="a_qty" id="ea_qty" type="number" min="1" class="form-control" required>
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label">Harga Satuan</label>
+              <input name="a_price" id="ea_price" type="text" class="form-control" required>
+            </div>
+            <div class="col-6 col-md-4">
+              <label class="form-label">Currency</label>
+              <input name="a_currency" id="ea_currency" type="text" class="form-control">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Tanggal Penjualan</label>
+              <input name="a_date" id="ea_date" type="date" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-light" data-bs-dismiss="modal" type="button">Batal</button>
+          <button class="btn btn-primary" type="submit">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Import Preview Modal -->
+<div class="modal fade" id="importPreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Preview Import</h5>
+        <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="importInfo" class="small text-muted mb-2"></div>
+        <h6>VPS</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Nama</th><th>IP</th><th>Port</th><th>Expire</th><th>Price</th><th>Currency</th></tr></thead>
+            <tbody id="prevVps"></tbody>
+          </table>
+        </div>
+        <h6 class="mt-3">Akun</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Tanggal</th><th>Nama</th><th>Merchant</th><th>Tipe</th><th>Qty</th><th>Price</th><th>Currency</th></tr></thead>
+            <tbody id="prevAkun"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <form id="cancelForm" method="post" class="me-auto"></form>
+        <form id="confirmForm" method="post"></form>
+        <button class="btn btn-outline-secondary" form="cancelForm">Cancel</button>
+        <button class="btn btn-primary" form="confirmForm">Confirm Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const token = new URLSearchParams(location.search).get("import_token");
+  if(!token) return;
+  fetch(`/admin/import/preview/${token}`)
+    .then(r=>r.json()).then(d=>{
+      if(!d.ok) return;
+      const vps = d.vps||[], akun=d.akun||[];
+      document.getElementById('importInfo').textContent = `VPS: ${vps.length} baris, Akun: ${akun.length} baris. Periksa sebelum disimpan.`;
+      document.getElementById('prevVps').innerHTML = vps.map(x=>`<tr><td>${x.name||''}</td><td>${x.ip||''}</td><td>${x.port||''}</td><td>${x.expire_date||''}</td><td>${x.price??0}</td><td>${x.currency||''}</td></tr>`).join('') || `<tr><td colspan="6" class="text-muted">Tidak ada data VPS</td></tr>`;
+      document.getElementById('prevAkun').innerHTML = akun.map(x=>`<tr><td>${x.sold_at||''}</td><td>${x.name||''}</td><td>${x.merchant||''}</td><td>${x.type||''}</td><td>${x.qty??0}</td><td>${x.price??0}</td><td>${x.currency||''}</td></tr>`).join('') || `<tr><td colspan="7" class="text-muted">Tidak ada data Akun</td></tr>`;
+      document.getElementById('confirmForm').action = `/admin/import/confirm/${token}`;
+      document.getElementById('cancelForm').action  = `/admin/import/cancel/${token}`;
+      new bootstrap.Modal(document.getElementById('importPreviewModal')).show();
+    }).catch(console.error);
+})();
+</script>
+
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+  // isi form edit dari tombol baris
+  document.querySelectorAll('.btn-edit-akun').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      document.getElementById('editAccountForm').action = `/admin/account/edit/${id}`;
+      document.getElementById('ea_name').value     = btn.dataset.name || '';
+      document.getElementById('ea_merchant').value = btn.dataset.merchant || '';
+      document.getElementById('ea_type').value     = btn.dataset.type || '';
+      document.getElementById('ea_qty').value      = btn.dataset.qty || 1;
+      document.getElementById('ea_price').value    = btn.dataset.price || 0;
+      document.getElementById('ea_currency').value = btn.dataset.currency || 'IDR';
+      document.getElementById('ea_date').value     = btn.dataset.date || '';
+    });
+  });
+</script>
+
+
+<!-- Import Preview Modal -->
+<div class="modal fade" id="importPreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Preview Import</h5>
+        <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="importInfo" class="small text-muted mb-2"></div>
+        <h6>VPS</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Nama</th><th>IP</th><th>Port</th><th>Expire</th><th>Price</th><th>Currency</th></tr></thead>
+            <tbody id="prevVps"></tbody>
+          </table>
+        </div>
+        <h6 class="mt-3">Akun</h6>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Tanggal</th><th>Nama</th><th>Merchant</th><th>Tipe</th><th>Qty</th><th>Price</th><th>Currency</th></tr></thead>
+            <tbody id="prevAkun"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <form id="cancelForm" method="post" class="me-auto"></form>
+        <form id="confirmForm" method="post"></form>
+        <button class="btn btn-outline-secondary" form="cancelForm">Cancel</button>
+        <button class="btn btn-primary" form="confirmForm">Confirm Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const token = new URLSearchParams(location.search).get("import_token");
+  if(!token) return;
+  fetch(`/admin/import/preview/${token}`)
+    .then(r=>r.json()).then(d=>{
+      if(!d.ok) return;
+      const vps = d.vps||[], akun=d.akun||[];
+      document.getElementById('importInfo').textContent = `VPS: ${vps.length} baris, Akun: ${akun.length} baris. Periksa sebelum disimpan.`;
+      document.getElementById('prevVps').innerHTML = vps.map(x=>`<tr><td>${x.name||''}</td><td>${x.ip||''}</td><td>${x.port||''}</td><td>${x.expire_date||''}</td><td>${x.price??0}</td><td>${x.currency||''}</td></tr>`).join('') || `<tr><td colspan="6" class="text-muted">Tidak ada data VPS</td></tr>`;
+      document.getElementById('prevAkun').innerHTML = akun.map(x=>`<tr><td>${x.sold_at||''}</td><td>${x.name||''}</td><td>${x.merchant||''}</td><td>${x.type||''}</td><td>${x.qty??0}</td><td>${x.price??0}</td><td>${x.currency||''}</td></tr>`).join('') || `<tr><td colspan="7" class="text-muted">Tidak ada data Akun</td></tr>`;
+      document.getElementById('confirmForm').action = `/admin/import/confirm/${token}`;
+      document.getElementById('cancelForm').action  = `/admin/import/cancel/${token}`;
+      new bootstrap.Modal(document.getElementById('importPreviewModal')).show();
+    }).catch(console.error);
+})();
+</script>
+
+{% endblock %}
