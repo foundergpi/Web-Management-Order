@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}Penjualan Akun{% endblock %}
+{% block content %}
+
+<div class="text-center">
+    <h1 class="h4 mb-0">DATA PENJUALAN AKUN SERVER</h1>
+    <div class="small-muted">Daftar transaksi akun yang sudah dicatat</div>
+</div>
+<br>
+<div class="card">
+    <div class="card-body">
+      <div class="row g-2 mb-0">
+        <div class="col-12 col-md-4">
+          <input id="q" class="form-control form-control-sm" placeholder="Search">
+        </div>
+        <div class="col-12 col-md-2 ms-auto text-end">
+          <div class="btn-group" role="group">
+            <button id="refresh" class="btn btn-outline-secondary btn-sm">Refresh</button>
+          </div>
+        </div>
+      </div>
+    </div>
+ <div class="card">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table align-middle table-hover">
+        <thead class="bg-body-secondary">
+          <tr class="text-nowrap">
+            <th>Tanggal</th>
+            <th>Nama</th>
+            <th>Merchant</th>
+            <th>Type</th>
+            <th class="text-end">Qty</th>
+            <th class="text-end">Harga</th>
+            <th class="text-end">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          {% for a in items %}
+          {% set sub = (a.price or 0) * (a.qty or 0) %}
+          <tr data-name="{{ (a.name or '')|lower }}"
+              data-merchant="{{ (a.merchant or '')|lower }}"
+              data-type="{{ (a.account_type or '')|lower }}">
+            <td>{{ a.sold_at.strftime('%Y-%m-%d') if a.sold_at.__class__.__name__=='datetime' else a.sold_at }}</td>
+            <td>{{ a.name }}</td>
+            <td>{{ a.merchant or '-' }}</td>
+            <td>{{ a.account_type or '-' }}</td>
+            <td class="text-end">{{ a.qty or 0 }}</td>
+            <td class="text-end font-monospace">IDR {{ "{:,.0f}".format(a.price or 0).replace(",", ".") }}</td>
+            <td class="text-end font-monospace">IDR {{ "{:,.0f}".format(sub).replace(",", ".") }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted">Belum ada data.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+   </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const q = document.getElementById('q');
+  const rows = document.getElementById('rows');
+  q.addEventListener('input', ()=>{
+    const s = (q.value || '').toLowerCase();
+    rows.querySelectorAll('tr').forEach(tr=>{
+      const ok = tr.dataset.name.includes(s)
+              || tr.dataset.merchant.includes(s)
+              || tr.dataset.type.includes(s);
+      tr.style.display = ok ? '' : 'none';
+    });
+  });
+  document.getElementById('refresh').addEventListener('click', ()=>location.reload());
+</script>
+{% endblock %}
